@@ -8,6 +8,15 @@
 #include <string>
 
 #include <stdlib.h>
+
+#include <unistd.h>
+#include <sys/ptrace.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/syscall.h>
+#include <sys/user.h>
+#include <sys/reg.h>   /* For constants ORIG_EAX etc */
+
 class SqlModelling 
 {
   void exec_query(sqlite3 * db, const char * sql)
@@ -104,10 +113,81 @@ class SqlModelling
 
 int main()
 {
-  SqlModelling modelling;
-  std::unordered_set<std::string> tortured = modelling.process();
-  for (const auto & s : tortured) {
-    std::cout << s << std::endl;
+
+#ifdef FORKING_ENABLED
+  pid_t child = fork();
+  if (child == 0) {
+#ifdef TRACING_ENABLED    
+    ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+    raise(SIGSTOP);
+#endif
+#endif
+    SqlModelling modelling;
+    std::unordered_set<std::string> tortured = modelling.process();
+    for (const auto & s : tortured) {
+      std::cout << s << std::endl;
+    }
+#ifdef FORKING_ENABLED    
   }
+  else {
+#ifdef TRACING_ENABLED    
+    waitpid(-1, NULL, __WALL);
+
+    ptrace(PTRACE_ATTACH, child, 0, 0);
+    ptrace(PTRACE_SETOPTIONS, child, NULL, PTRACE_O_TRACEFORK 
+                                         | PTRACE_O_TRACEVFORK 
+                                         | PTRACE_O_TRACECLONE 
+                                         | PTRACE_O_TRACEEXIT 
+                                         | PTRACE_O_EXITKILL);
+
+    pid_t pid = child;
+    while (true) {
+      int status;
+
+      ptrace(PTRACE_SYSCALL, pid, 0, 0);
+      pid = waitpid(-1, &status, __WALL);
+
+      if(WIFEXITED(status))
+      { 
+        break;
+      }
+      else if (WIFSTOPPED(status))
+      {   
+          struct user_regs_struct regs;
+          ptrace(PTRACE_GETREGS, pid, 0, &regs);
+          if (regs.rax == (unsigned long)-ENOSYS) { //syscall_enter stop
+            if (regs.orig_rax == __NR_open) {
+              std::string file_name;
+              long word = ptrace(PTRACE_PEEKDATA, pid, regs.rdi, NULL);
+              char * tmp = (char *)&word;
+              while (*tmp != '\0') {
+                file_name.push_back(*tmp);
+                ++tmp;
+                if (tmp == (char *)(&word + 1)) {
+                  regs.rdi += sizeof(word);
+                  word = ptrace(PTRACE_PEEKDATA, pid, regs.rdi, NULL);
+                  tmp = (char *)&word;
+                }
+                }
+              }
+              std::cout << "file_name: " << file_name << std::endl;
+            }
+          }
+          else { //syscall_exit stop
+          }
+      }
+    }
+#else
+    for (;;) {
+      int status;
+      waitpid(child, &status, __WNOTHREAD);
+      if (WIFEXITED(status)) {
+        break;
+      }
+    }
+#endif
+  }
+#endif
+
   return 0;
 }
