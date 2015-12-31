@@ -45,6 +45,12 @@ void torture_database(sqlite3 * db)
   exec_query(db, "SELECT * from COMPANY"); 
 }
 
+void trace_callback(void * , const char * query)
+{
+  std::cout << query << std::endl;
+}
+
+
 void torture_database(const char * dbname)
 {
   sqlite3 *db;
@@ -53,6 +59,7 @@ void torture_database(const char * dbname)
     std::cerr << "Can't open database: " << sqlite3_errmsg(db) << std::endl;
     exit(1);
   }
+  sqlite3_trace(db, trace_callback, NULL);
   torture_database(db);
   sqlite3_close(db);
 }
