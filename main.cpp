@@ -7,6 +7,8 @@
 #include <unordered_set>
 #include <string>
 #include <cassert>
+#include <thread>
+#include <mutex>
 
 #include <stdlib.h>
 
@@ -116,7 +118,7 @@ class SqlModelling
 #define TRACING_ENABLED
 
 #ifdef TRACING_ENABLED    
-void trace(pid_t child, std::unordered_set<std::string>& files)
+void trace(pid_t child, std::unordered_set<std::string>& files, std::mutex & mutex)
 {
   waitpid(-1, NULL, __WALL);
 
@@ -156,7 +158,10 @@ void trace(pid_t child, std::unordered_set<std::string>& files)
                 tmp = (char *)&word;
               }
             }
-            files.insert(file_name);
+            {
+              std::lock_guard<std::mutex> l(mutex);
+              files.insert(file_name);
+            }
           }
         }
         else { //syscall_exit stop
@@ -168,32 +173,33 @@ void trace(pid_t child, std::unordered_set<std::string>& files)
 
 
 #ifdef FORKING_ENABLED
-std::vector<std::string> read_from_parent(int pipefd)
+std::unordered_set<std::string> read_from_pipe(int pipefd)
 {
-  std::vector<std::string> ret;
+  std::unordered_set<std::string> ret;
 
   char buf;
-  if (read(pipefd, &buf, 1) <= 0 ) 
+  if (read(pipefd, &buf, 1) <= 0) 
     return ret;
 
-  ret.push_back(std::string());
   assert(buf != 0);
-  ret.back().push_back(buf);
+
+  std::string back;
+  back.push_back(buf);
 
   while (read(pipefd, &buf, 1) > 0) {
-    std::cout << "aaa: " << buf << std::endl;
     if (buf == 0) {
-      ret.push_back(std::string());
+      ret.insert(back);
+      back = std::string();
     }
     else {
-      ret.back().push_back(buf);
+      back.push_back(buf);
     } 
   }
 
   return ret;
 }
 
-void write_to_child(int pipefd, const std::unordered_set<std::string>& files)
+void write_to_pipe(int pipefd, const std::unordered_set<std::string>& files)
 {
   for (std::unordered_set<std::string>::const_iterator iter = files.begin();
         iter != files.end();
@@ -202,10 +208,10 @@ void write_to_child(int pipefd, const std::unordered_set<std::string>& files)
   }
 }
 
-void search_unnecessary_openings(const std::vector<std::string>& opened_files, 
+void search_unnecessary_openings(const std::unordered_set<std::string>& opened_files, 
                                  const std::unordered_set<std::string>& tortured)
 {
-  for (std::vector<std::string>::const_iterator iter = opened_files.begin();
+  for (std::unordered_set<std::string>::const_iterator iter = opened_files.begin();
         iter != opened_files.end();
         ++iter) {
     std::unordered_set<std::string>::const_iterator find_it = tortured.find(*iter);
@@ -216,6 +222,13 @@ void search_unnecessary_openings(const std::vector<std::string>& opened_files,
 }
 #endif
 
+void reader_func(int child_socket, const std::unordered_set<std::string>& opened_files, std::mutex& mutex)
+{
+  std::unordered_set<std::string> tortured = read_from_pipe(child_socket);
+  std::lock_guard<std::mutex> lk(mutex);
+  search_unnecessary_openings(opened_files, tortured);
+}
+
 int main()
 {
 #ifdef FORKING_ENABLED
@@ -223,7 +236,7 @@ int main()
   pipe(pipefd);
   pid_t child = fork();
   if (child == 0) {
-    close(pipefd[1]);
+    close(pipefd[0]);
 #ifdef TRACING_ENABLED    
     ptrace(PTRACE_TRACEME, 0, NULL, NULL);
     raise(SIGSTOP);
@@ -232,17 +245,18 @@ int main()
     SqlModelling modelling;
     std::unordered_set<std::string> tortured = modelling.process();
 #ifdef FORKING_ENABLED    
-    std::vector<std::string> opened_files = read_from_parent(pipefd[0]);
-    close(pipefd[0]);
-    search_unnecessary_openings(opened_files, tortured);
+    write_to_pipe(pipefd[1], tortured);
+    close(pipefd[1]);
   }
   else {
-    close(pipefd[0]);
+    close(pipefd[1]);
 #ifdef TRACING_ENABLED
     std::unordered_set<std::string> files;
-    trace(child, files);
-    write_to_child(pipefd[1], files);
-    close(pipefd[1]);
+    std::mutex mutex;
+    std::thread thread(reader_func, pipefd[0], std::ref(files), std::ref(mutex));
+    trace(child, files, mutex);
+    close(pipefd[0]);
+    thread.join();
 #else 
     for (;;) {
       int status;
