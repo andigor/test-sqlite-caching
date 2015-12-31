@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_set>
 #include <string>
+#include <cassert>
 
 #include <stdlib.h>
 
@@ -111,12 +112,118 @@ class SqlModelling
   }
 };
 
-int main()
+#define FORKING_ENABLED
+#define TRACING_ENABLED
+
+#ifdef TRACING_ENABLED    
+void trace(pid_t child, std::unordered_set<std::string>& files)
 {
+  waitpid(-1, NULL, __WALL);
+
+  ptrace(PTRACE_ATTACH, child, 0, 0);
+  ptrace(PTRACE_SETOPTIONS, child, NULL, PTRACE_O_TRACEFORK 
+                                       | PTRACE_O_TRACEVFORK 
+                                       | PTRACE_O_TRACECLONE 
+                                       | PTRACE_O_TRACEEXIT 
+                                       | PTRACE_O_EXITKILL);
+
+  pid_t pid = child;
+  while (true) {
+    int status;
+
+    ptrace(PTRACE_SYSCALL, pid, 0, 0);
+    pid = waitpid(-1, &status, __WALL);
+
+    if(WIFEXITED(status))
+    { 
+      break;
+    }
+    else if (WIFSTOPPED(status))
+    {   
+        struct user_regs_struct regs;
+        ptrace(PTRACE_GETREGS, pid, 0, &regs);
+        if (regs.rax == (unsigned long)-ENOSYS) { //syscall_enter stop
+          if (regs.orig_rax == __NR_open) {
+            std::string file_name;
+            long word = ptrace(PTRACE_PEEKDATA, pid, regs.rdi, NULL);
+            char * tmp = (char *)&word;
+            while (*tmp != '\0') {
+              file_name.push_back(*tmp);
+              ++tmp;
+              if (tmp == (char *)(&word + 1)) {
+                regs.rdi += sizeof(word);
+                word = ptrace(PTRACE_PEEKDATA, pid, regs.rdi, NULL);
+                tmp = (char *)&word;
+              }
+            }
+            files.insert(file_name);
+          }
+        }
+        else { //syscall_exit stop
+        }
+    }
+  }
+}
+#endif
+
 
 #ifdef FORKING_ENABLED
+std::vector<std::string> read_from_parent(int pipefd)
+{
+  std::vector<std::string> ret;
+
+  char buf;
+  if (read(pipefd, &buf, 1) <= 0 ) 
+    return ret;
+
+  ret.push_back(std::string());
+  assert(buf != 0);
+  ret.back().push_back(buf);
+
+  while (read(pipefd, &buf, 1) > 0) {
+    std::cout << "aaa: " << buf << std::endl;
+    if (buf == 0) {
+      ret.push_back(std::string());
+    }
+    else {
+      ret.back().push_back(buf);
+    } 
+  }
+
+  return ret;
+}
+
+void write_to_child(int pipefd, const std::unordered_set<std::string>& files)
+{
+  for (std::unordered_set<std::string>::const_iterator iter = files.begin();
+        iter != files.end();
+        ++iter) {
+    write(pipefd, iter->c_str(), iter->size() + 1); 
+  }
+}
+
+void search_unnecessary_openings(const std::vector<std::string>& opened_files, 
+                                 const std::unordered_set<std::string>& tortured)
+{
+  for (std::vector<std::string>::const_iterator iter = opened_files.begin();
+        iter != opened_files.end();
+        ++iter) {
+    std::unordered_set<std::string>::const_iterator find_it = tortured.find(*iter);
+    if (find_it == tortured.end()) {
+      std::cout << "file: " << *iter << " unnecessary opened" << std::endl;
+    }
+  }
+}
+#endif
+
+int main()
+{
+#ifdef FORKING_ENABLED
+  int pipefd[2];
+  pipe(pipefd);
   pid_t child = fork();
   if (child == 0) {
+    close(pipefd[1]);
 #ifdef TRACING_ENABLED    
     ptrace(PTRACE_TRACEME, 0, NULL, NULL);
     raise(SIGSTOP);
@@ -124,60 +231,19 @@ int main()
 #endif
     SqlModelling modelling;
     std::unordered_set<std::string> tortured = modelling.process();
-    for (const auto & s : tortured) {
-      std::cout << s << std::endl;
-    }
 #ifdef FORKING_ENABLED    
+    std::vector<std::string> opened_files = read_from_parent(pipefd[0]);
+    close(pipefd[0]);
+    search_unnecessary_openings(opened_files, tortured);
   }
   else {
-#ifdef TRACING_ENABLED    
-    waitpid(-1, NULL, __WALL);
-
-    ptrace(PTRACE_ATTACH, child, 0, 0);
-    ptrace(PTRACE_SETOPTIONS, child, NULL, PTRACE_O_TRACEFORK 
-                                         | PTRACE_O_TRACEVFORK 
-                                         | PTRACE_O_TRACECLONE 
-                                         | PTRACE_O_TRACEEXIT 
-                                         | PTRACE_O_EXITKILL);
-
-    pid_t pid = child;
-    while (true) {
-      int status;
-
-      ptrace(PTRACE_SYSCALL, pid, 0, 0);
-      pid = waitpid(-1, &status, __WALL);
-
-      if(WIFEXITED(status))
-      { 
-        break;
-      }
-      else if (WIFSTOPPED(status))
-      {   
-          struct user_regs_struct regs;
-          ptrace(PTRACE_GETREGS, pid, 0, &regs);
-          if (regs.rax == (unsigned long)-ENOSYS) { //syscall_enter stop
-            if (regs.orig_rax == __NR_open) {
-              std::string file_name;
-              long word = ptrace(PTRACE_PEEKDATA, pid, regs.rdi, NULL);
-              char * tmp = (char *)&word;
-              while (*tmp != '\0') {
-                file_name.push_back(*tmp);
-                ++tmp;
-                if (tmp == (char *)(&word + 1)) {
-                  regs.rdi += sizeof(word);
-                  word = ptrace(PTRACE_PEEKDATA, pid, regs.rdi, NULL);
-                  tmp = (char *)&word;
-                }
-                }
-              }
-              std::cout << "file_name: " << file_name << std::endl;
-            }
-          }
-          else { //syscall_exit stop
-          }
-      }
-    }
-#else
+    close(pipefd[0]);
+#ifdef TRACING_ENABLED
+    std::unordered_set<std::string> files;
+    trace(child, files);
+    write_to_child(pipefd[1], files);
+    close(pipefd[1]);
+#else 
     for (;;) {
       int status;
       waitpid(child, &status, __WNOTHREAD);
