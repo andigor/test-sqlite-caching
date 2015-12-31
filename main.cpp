@@ -1,6 +1,8 @@
 #include <sqlite3.h> 
 
 #include <iostream>
+#include <cstdlib>
+#include <ctime>
 
 #include <stdlib.h>
 
@@ -15,18 +17,13 @@ void exec_query(sqlite3 * db, const char * sql)
    }
 }
 
-void process()
+void torture_database(sqlite3 * db)
 {
-   sqlite3 *db;
+  if (std::rand() % 3 == 0)
+    return;
 
-   int rc = sqlite3_open("test.db", &db);
-
-   if( rc ){
-     std::cerr << "Can't open database: " << sqlite3_errmsg(db) << std::endl;
-     exit(1);
-   }
    
-   exec_query(db,
+  exec_query(db,
          "CREATE TABLE IF NOT EXISTS COMPANY("  \
          "ID             INT     NOT NULL," \
          "NAME           TEXT    NOT NULL," \
@@ -35,7 +32,7 @@ void process()
          "SALARY         REAL );"); 
    
    
-    exec_query(db,
+  exec_query(db,
            "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "  \
            "VALUES (1, 'Paul', 32, 'California', 20000.00 ); " \
            "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "  \
@@ -45,9 +42,29 @@ void process()
            "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY)" \
            "VALUES (4, 'Mark', 25, 'Rich-Mond ', 65000.00 );");
 
-   exec_query(db, "SELECT * from COMPANY"); 
+  exec_query(db, "SELECT * from COMPANY"); 
+}
 
-   sqlite3_close(db);
+void torture_database(const char * dbname)
+{
+  sqlite3 *db;
+  int rc = sqlite3_open(dbname, &db);
+  if( rc ){
+    std::cerr << "Can't open database: " << sqlite3_errmsg(db) << std::endl;
+    exit(1);
+  }
+  torture_database(db);
+  sqlite3_close(db);
+}
+
+void process()
+{
+  std::srand(std::time(0));
+  torture_database("test1.db");
+  torture_database("test2.db");
+  torture_database("test3.db");
+  torture_database("test4.db");
+  torture_database("test5.db");
 }
 
 
@@ -55,5 +72,6 @@ void process()
 int main()
 {
   process();
+
   return 0;
 }
