@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <ctime>
+#include <vector>
 
 #include <stdlib.h>
 
@@ -19,10 +20,6 @@ void exec_query(sqlite3 * db, const char * sql)
 
 void torture_database(sqlite3 * db)
 {
-  if (std::rand() % 3 == 0)
-    return;
-
-   
   exec_query(db,
          "CREATE TABLE IF NOT EXISTS COMPANY("  \
          "ID             INT     NOT NULL," \
@@ -50,8 +47,7 @@ void trace_callback(void * , const char * query)
   std::cout << query << std::endl;
 }
 
-
-void torture_database(const char * dbname)
+sqlite3* open_database(const char * dbname)
 {
   sqlite3 *db;
   int rc = sqlite3_open(dbname, &db);
@@ -60,18 +56,27 @@ void torture_database(const char * dbname)
     exit(1);
   }
   sqlite3_trace(db, trace_callback, NULL);
-  torture_database(db);
-  sqlite3_close(db);
+  return db;
 }
+
 
 void process()
 {
   std::srand(std::time(0));
-  torture_database("test1.db");
-  torture_database("test2.db");
-  torture_database("test3.db");
-  torture_database("test4.db");
-  torture_database("test5.db");
+  std::vector<sqlite3*> dbs;
+
+  dbs.push_back(open_database("test1.db"));
+  dbs.push_back(open_database("test2.db"));
+  dbs.push_back(open_database("test3.db"));
+  dbs.push_back(open_database("test4.db"));
+  dbs.push_back(open_database("test5.db"));
+
+  for (int i = 0; i<dbs.size(); ++i) {
+    torture_database(dbs[std::rand() % dbs.size()]);  
+  }
+
+  for (int i = 0; i<dbs.size(); ++i)
+    sqlite3_close(dbs[i]);
 }
 
 
