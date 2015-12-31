@@ -59,11 +59,11 @@ class SqlModelling
 
   struct CallbackData
   {
-    CallbackData(std::unordered_set<std::string>& d, sqlite3* db) 
+    CallbackData(std::vector<std::string>& d, sqlite3* db) 
       : tortured_databases_(d), db_(db)
     {}
 
-    std::unordered_set<std::string> & tortured_databases_;
+    std::vector<std::string> & tortured_databases_;
     sqlite3* db_;
   };
 
@@ -71,7 +71,7 @@ class SqlModelling
   {
     CallbackData * d = static_cast<CallbackData*>(arg);
     std::string n(sqlite3_db_filename(d->db_, "main"));
-    d->tortured_databases_.insert(n);
+    d->tortured_databases_.push_back(n);
   }
 
   sqlite3* open_database(const char * dbname)
@@ -86,12 +86,12 @@ class SqlModelling
   }
 
   public:
-  std::unordered_set<std::string> process()
+  std::vector<std::string> process()
   {
     std::srand(std::time(0));
 
     std::vector<CallbackData> dbs;
-    std::unordered_set<std::string> tortured_databases;
+    std::vector<std::string> tortured_databases;
 
     dbs.emplace_back(CallbackData(tortured_databases, open_database("test1.db")));
     dbs.emplace_back(CallbackData(tortured_databases, open_database("test2.db")));
@@ -118,7 +118,7 @@ class SqlModelling
 #define TRACING_ENABLED
 
 #ifdef TRACING_ENABLED    
-void trace(pid_t child, std::unordered_set<std::string>& files, std::mutex & mutex)
+void trace(pid_t child, std::vector<std::string>& files, std::mutex & mutex)
 {
   waitpid(-1, NULL, __WALL);
 
@@ -160,7 +160,7 @@ void trace(pid_t child, std::unordered_set<std::string>& files, std::mutex & mut
             }
             {
               std::lock_guard<std::mutex> l(mutex);
-              files.insert(file_name);
+              files.push_back(file_name);
             }
           }
         }
@@ -173,9 +173,9 @@ void trace(pid_t child, std::unordered_set<std::string>& files, std::mutex & mut
 
 
 #ifdef FORKING_ENABLED
-std::unordered_set<std::string> read_from_pipe(int pipefd)
+std::vector<std::string> read_from_pipe(int pipefd)
 {
-  std::unordered_set<std::string> ret;
+  std::vector<std::string> ret;
 
   char buf;
   if (read(pipefd, &buf, 1) <= 0) 
@@ -183,48 +183,49 @@ std::unordered_set<std::string> read_from_pipe(int pipefd)
 
   assert(buf != 0);
 
-  std::string back;
-  back.push_back(buf);
+  ret.push_back(std::string());
+  ret.back().push_back(buf);
 
   while (read(pipefd, &buf, 1) > 0) {
     if (buf == 0) {
-      ret.insert(back);
-      back = std::string();
+      ret.push_back(std::string());
     }
     else {
-      back.push_back(buf);
+      ret.back().push_back(buf);
     } 
   }
 
   return ret;
 }
 
-void write_to_pipe(int pipefd, const std::unordered_set<std::string>& files)
+void write_to_pipe(int pipefd, const std::vector<std::string>& files)
 {
-  for (std::unordered_set<std::string>::const_iterator iter = files.begin();
+  for (std::vector<std::string>::const_iterator iter = files.begin();
         iter != files.end();
         ++iter) {
     write(pipefd, iter->c_str(), iter->size() + 1); 
   }
 }
 
-void search_unnecessary_openings(const std::unordered_set<std::string>& opened_files, 
-                                 const std::unordered_set<std::string>& tortured)
+void search_unnecessary_openings(const std::vector<std::string>& opened_files, 
+                                 const std::vector<std::string>& tortured)
 {
-  for (std::unordered_set<std::string>::const_iterator iter = opened_files.begin();
-        iter != opened_files.end();
+  std::unordered_set<std::string> tort(tortured.begin(), tortured.end());
+  std::unordered_set<std::string> opened(opened_files.begin(), opened_files.end());
+  for (std::unordered_set<std::string>::const_iterator iter = opened.begin();
+        iter != opened.end();
         ++iter) {
-    std::unordered_set<std::string>::const_iterator find_it = tortured.find(*iter);
-    if (find_it == tortured.end()) {
+    std::unordered_set<std::string>::const_iterator find_it = tort.find(*iter);
+    if (find_it == tort.end()) {
       std::cout << "file: " << *iter << " unnecessary opened" << std::endl;
     }
   }
 }
 #endif
 
-void reader_func(int child_socket, const std::unordered_set<std::string>& opened_files, std::mutex& mutex)
+void reader_func(int child_socket, const std::vector<std::string>& opened_files, std::mutex& mutex)
 {
-  std::unordered_set<std::string> tortured = read_from_pipe(child_socket);
+  std::vector<std::string> tortured = read_from_pipe(child_socket);
   std::lock_guard<std::mutex> lk(mutex);
   search_unnecessary_openings(opened_files, tortured);
 }
@@ -243,7 +244,7 @@ int main()
 #endif
 #endif
     SqlModelling modelling;
-    std::unordered_set<std::string> tortured = modelling.process();
+    std::vector<std::string> tortured = modelling.process();
 #ifdef FORKING_ENABLED    
     write_to_pipe(pipefd[1], tortured);
     close(pipefd[1]);
@@ -251,7 +252,7 @@ int main()
   else {
     close(pipefd[1]);
 #ifdef TRACING_ENABLED
-    std::unordered_set<std::string> files;
+    std::vector<std::string> files;
     std::mutex mutex;
     std::thread thread(reader_func, pipefd[0], std::ref(files), std::ref(mutex));
     trace(child, files, mutex);
