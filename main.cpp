@@ -144,17 +144,33 @@ void trace(pid_t child, std::vector<std::string>& files, std::mutex & mutex)
     {   
         struct user_regs_struct regs;
         ptrace(PTRACE_GETREGS, pid, 0, &regs);
-        if (regs.rax == (unsigned long)-ENOSYS) { //syscall_enter stop
-          if (regs.orig_rax == __NR_open) {
+        struct regs {
+#ifdef __x86_64__
+          unsigned long long
+#else
+          long
+#endif
+            err, 
+            syscall, 
+            arg0;
+        } regs_ = { 
+#ifdef __x86_64__
+          regs.rax, regs.orig_rax, regs.rdi
+#else
+          regs.eax, regs.orig_eax, regs.ebx
+#endif
+        };
+        if (regs_.err == (unsigned long)-ENOSYS) { //syscall_enter stop
+          if (regs_.syscall == __NR_open) {
             std::string file_name;
-            long word = ptrace(PTRACE_PEEKDATA, pid, regs.rdi, NULL);
+            long word = ptrace(PTRACE_PEEKDATA, pid, regs_.arg0, NULL);
             char * tmp = (char *)&word;
             while (*tmp != '\0') {
               file_name.push_back(*tmp);
               ++tmp;
               if (tmp == (char *)(&word + 1)) {
-                regs.rdi += sizeof(word);
-                word = ptrace(PTRACE_PEEKDATA, pid, regs.rdi, NULL);
+                regs_.arg0 += sizeof(word);
+                word = ptrace(PTRACE_PEEKDATA, pid, regs_.arg0, NULL);
                 tmp = (char *)&word;
               }
             }
