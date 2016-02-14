@@ -237,13 +237,14 @@ void search_unnecessary_openings(const std::vector<std::string>& opened_files,
   }
 }
 #endif
-
+#ifdef FORKING_ENABLED
 void reader_func(int child_socket, const std::vector<std::string>& opened_files, std::mutex& mutex)
 {
   std::vector<std::string> tortured = read_from_pipe(child_socket);
   std::lock_guard<std::mutex> lk(mutex);
   search_unnecessary_openings(opened_files, tortured);
 }
+#endif
 
 int main()
 {
