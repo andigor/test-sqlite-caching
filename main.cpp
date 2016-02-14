@@ -19,6 +19,8 @@
 #include <sys/syscall.h>
 #include <sys/user.h>
 #include <sys/reg.h>   /* For constants ORIG_EAX etc */
+int status1;
+int status2;
 
 class SqlModelling 
 {
@@ -55,6 +57,7 @@ class SqlModelling
              "VALUES (4, 'Mark', 25, 'Rich-Mond ', 65000.00 );");
 
     exec_query(db, "SELECT * from COMPANY"); 
+    exec_query(db, "SELECT * from COMPANY"); 
   }
 
   struct CallbackData
@@ -88,7 +91,7 @@ class SqlModelling
   public:
   std::vector<std::string> process()
   {
-    std::srand(std::time(0));
+    //std::srand(std::time(0));
 
     std::vector<CallbackData> dbs;
     std::vector<std::string> tortured_databases;
@@ -104,7 +107,7 @@ class SqlModelling
     }
 
     for (size_t i = 0; i<dbs.size(); ++i) {
-      torture_database(dbs[std::rand() % dbs.size()].db_);  
+      torture_database(dbs[i].db_);  
     }
 
     for (size_t i = 0; i<dbs.size(); ++i) {
