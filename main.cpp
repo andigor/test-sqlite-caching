@@ -114,8 +114,8 @@ class SqlModelling
   }
 };
 
-#define FORKING_ENABLED
-#define TRACING_ENABLED
+//#define FORKING_ENABLED
+//#define TRACING_ENABLED
 
 #ifdef TRACING_ENABLED    
 void trace(pid_t child, std::vector<std::string>& files, std::mutex & mutex)
