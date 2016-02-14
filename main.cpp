@@ -146,10 +146,9 @@ void trace(pid_t child, std::vector<std::string>& files, std::mutex & mutex)
         ptrace(PTRACE_GETREGS, pid, 0, &regs);
         struct regs {
 #ifdef __x86_64__
-          unsigned long long
-#else
-          long
+          unsigned long 
 #endif
+          long
             err, 
             syscall, 
             arg0;
