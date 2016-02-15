@@ -37,24 +37,24 @@ class SqlModelling
 
   void torture_database(sqlite3 * db)
   {
-    exec_query(db,
-           "CREATE TABLE IF NOT EXISTS COMPANY("  \
-           "ID             INT     NOT NULL," \
-           "NAME           TEXT    NOT NULL," \
-           "AGE            INT     NOT NULL," \
-           "ADDRESS        CHAR(50)," \
-           "SALARY         REAL );"); 
-     
-     
-    exec_query(db,
-             "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "  \
-             "VALUES (1, 'Paul', 32, 'California', 20000.00 ); " \
-             "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "  \
-             "VALUES (2, 'Allen', 25, 'Texas', 15000.00 ); "     \
-             "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY)" \
-             "VALUES (3, 'Teddy', 23, 'Norway', 20000.00 );" \
-             "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY)" \
-             "VALUES (4, 'Mark', 25, 'Rich-Mond ', 65000.00 );");
+    //exec_query(db,
+    //       "CREATE TABLE IF NOT EXISTS COMPANY("  \
+    //       "ID             INT     NOT NULL," \
+    //       "NAME           TEXT    NOT NULL," \
+    //       "AGE            INT     NOT NULL," \
+    //       "ADDRESS        CHAR(50)," \
+    //       "SALARY         REAL );"); 
+    // 
+    // 
+    //exec_query(db,
+    //         "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "  \
+    //         "VALUES (1, 'Paul', 32, 'California', 20000.00 ); " \
+    //         "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY) "  \
+    //         "VALUES (2, 'Allen', 25, 'Texas', 15000.00 ); "     \
+    //         "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY)" \
+    //         "VALUES (3, 'Teddy', 23, 'Norway', 20000.00 );" \
+    //         "INSERT INTO COMPANY (ID,NAME,AGE,ADDRESS,SALARY)" \
+    //         "VALUES (4, 'Mark', 25, 'Rich-Mond ', 65000.00 );");
 
     exec_query(db, "SELECT * from COMPANY"); 
     exec_query(db, "SELECT * from COMPANY"); 
@@ -97,14 +97,14 @@ class SqlModelling
     std::vector<std::string> tortured_databases;
 
     dbs.emplace_back(CallbackData(tortured_databases, open_database("test1.db")));
-    dbs.emplace_back(CallbackData(tortured_databases, open_database("test2.db")));
-    dbs.emplace_back(CallbackData(tortured_databases, open_database("test3.db")));
-    dbs.emplace_back(CallbackData(tortured_databases, open_database("test4.db")));
-    dbs.emplace_back(CallbackData(tortured_databases, open_database("test5.db")));
+    //dbs.emplace_back(CallbackData(tortured_databases, open_database("test2.db")));
+    //dbs.emplace_back(CallbackData(tortured_databases, open_database("test3.db")));
+    //dbs.emplace_back(CallbackData(tortured_databases, open_database("test4.db")));
+    //dbs.emplace_back(CallbackData(tortured_databases, open_database("test5.db")));
 
-    for (size_t i = 0; i<dbs.size(); ++i) {
-      sqlite3_trace(dbs[i].db_, trace_callback, &dbs[i]);
-    }
+    //for (size_t i = 0; i<dbs.size(); ++i) {
+    //  sqlite3_trace(dbs[i].db_, trace_callback, &dbs[i]);
+    //}
 
     for (size_t i = 0; i<dbs.size(); ++i) {
       torture_database(dbs[i].db_);  
