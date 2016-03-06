@@ -6,10 +6,10 @@ all: main_64
 SQLITE_DIR := sqlite-amalgamation-3100200
 
 main_64 : main_64.o sqlite_64.o
-	g++ -g $^ -o $@ -std=c++11 -pthread -m64 -ldl
+	g++ -g -O3 $^ -o $@ -std=c++11 -pthread -m64 -ldl
 
 main_64.o : main.cpp $(SQLITE_DIR)/sqlite3.h
-	g++ -g $< -c -o $@ -std=c++11 -pthread -m64 -I$(SQLITE_DIR)
+	g++ -g -O3 $< -c -o $@ -std=c++11 -pthread -m64 -I$(SQLITE_DIR)
 
 sqlite_64.o : $(SQLITE_DIR)/sqlite3.c $(SQLITE_DIR)/sqlite3.h
 	gcc -g $< -c -o $@ -pthread -m64 -I$(SQLITE_DIR) 
