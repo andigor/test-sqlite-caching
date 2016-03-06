@@ -67,19 +67,24 @@ sqlite3* open_database(const char * dbname)
   return db;
 }
 
+void process_data(sqlite3* db_, sqlite3_stmt* stmt_)
+{
+  std::vector<std::string> d = read_data(db_, stmt_);
+  for (const auto & s : d) {
+    std::cout << s << std::endl;
+  }
+}
+
 void process()
 {
   sqlite3* db_ = open_database("test1.db");
   sqlite3_stmt * stmt_ = prepare_query(db_, "select * from company");
-  std::vector<std::string> d = read_data(db_, stmt_);
-  
+
+  process_data(db_, stmt_); 
+
   sqlite3_finalize(stmt_);
 
   sqlite3_close(db_);
-
-  for (const auto & s : d) {
-    std::cout << s << std::endl;
-  }
 }
 
 int main()
