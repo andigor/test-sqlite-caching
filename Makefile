@@ -12,7 +12,7 @@ main_64.o : main.cpp $(SQLITE_DIR)/sqlite3.h
 	g++ -g -O3 $< -c -o $@ -std=c++11 -pthread -m64 -I$(SQLITE_DIR)
 
 sqlite_64.o : $(SQLITE_DIR)/sqlite3.c $(SQLITE_DIR)/sqlite3.h
-	gcc -g $< -c -o $@ -pthread -m64 -I$(SQLITE_DIR) 
+	gcc -g $< -c -o $@ -pthread -m64 -I$(SQLITE_DIR) -DSQLITE_THREADSAFE=2
 
 
 #main_32 : main_32.o
