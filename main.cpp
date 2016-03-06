@@ -9,9 +9,11 @@
 #include <cassert>
 #include <thread>
 #include <mutex>
+#include <atomic>
 
 
 std::mutex mut;
+std::atomic_int atom;
 
 sqlite3_stmt* prepare_query(sqlite3 * db, const char * const sql)
 {
@@ -42,20 +44,38 @@ std::vector<std::string> read_data(sqlite3 * db, sqlite3_stmt * prepared)
   std::vector<std::string> ret;
 //  reset_query(db, prepared);
   int rc;
+  size_t counter = 0;
   while (true) {
-    mut.lock();
+//    mut.lock();
+    int expected = 0;
+    while (!atom.compare_exchange_weak(
+          expected
+          ,1 
+          ,std::memory_order_acquire 
+          ,std::memory_order_relaxed
+          ) ) {
+      expected = 0;
+    }
+    ++counter;
     rc = sqlite3_step(prepared);
     if (rc != SQLITE_ROW)
+    {
+ //     mut.unlock();
+      atom.store(0);
       break;
-    ret.push_back( (const char *)sqlite3_column_text(prepared, 1) ); 
-    mut.unlock();
+    }
+    const char * txt = (const char *)sqlite3_column_text(prepared, 1);
+    ret.push_back( txt  ); 
+    atom.store(0, std::memory_order_release);
+  //  mut.unlock();
   }
 
   if (rc != SQLITE_DONE) {
     std::cerr << "SQL error: " << sqlite3_errmsg(db) << std::endl;
     exit(2);
   }
-
+ 
+  std::cout << "counter: " << counter << std::endl;
   return ret;
 }
 
@@ -70,20 +90,22 @@ sqlite3* open_database(const char * dbname)
   return db;
 }
 
-void process_data(sqlite3* db_, sqlite3_stmt* stmt_)
+void process_data(sqlite3* db_, sqlite3_stmt* stmt_, size_t & s)
 {
   std::vector<std::string> d = read_data(db_, stmt_);
-  for (const auto & s : d) {
-    std::cout << s << std::endl;
-  }
+  s = d.size();
+  //std::cout << "size: " << d.size() << std::endl;
+//  for (const auto & s : d) {
+//    std::cout << s << std::endl;
+//  }
 }
 
-void process()
+void process(size_t & s)
 {
   sqlite3* db_ = open_database("test1.db");
   sqlite3_stmt * stmt_ = prepare_query(db_, "select * from company");
 
-  process_data(db_, stmt_); 
+  process_data(db_, stmt_, s); 
 
   sqlite3_finalize(stmt_);
 
@@ -95,12 +117,14 @@ void process_mt()
   sqlite3* db_ = open_database("test1.db");
   sqlite3_stmt * stmt_ = prepare_query(db_, "select * from company");
 
-
-  std::thread thr1(process_data, db_, stmt_);
-  std::thread thr2(process_data, db_, stmt_);
+  size_t s1, s2;
+  std::thread thr1(process_data, db_, stmt_, std::ref(s1));
+  std::thread thr2(process_data, db_, stmt_, std::ref(s2));
 
   thr1.join();
   thr2.join();
+
+  std::cout << "s1: " << s1 << " s2: " << s2 << " sum: " << s1 + s2 << std::endl;
 
   sqlite3_finalize(stmt_);
 
