@@ -9,15 +9,51 @@
 #include <cassert>
 #include <thread>
 #include <mutex>
-void exec_query(sqlite3 * db, const char * sql)
+
+
+
+sqlite3_stmt* prepare_query(sqlite3 * db, const char * const sql)
 {
-   char *zErrMsg = 0;
-   int rc = sqlite3_exec(db, sql, NULL, 0, &zErrMsg);
-   if( rc != SQLITE_OK ){
-     std::cerr << "SQL error: " << zErrMsg << std::endl;
-     sqlite3_free(zErrMsg);
-     exit(2);
-   }
+  sqlite3_stmt * prepared;
+ 
+  int rc = sqlite3_prepare_v2(db, sql, -1, &prepared, NULL);
+ 
+  if(rc != SQLITE_OK) {
+    std::cerr << "SQL error: " << sqlite3_errmsg(db) << std::endl;
+    exit(2);
+  }
+ 
+  return prepared;
+}
+
+void reset_query(sqlite3 * db, sqlite3_stmt * prepared)
+{
+  int rc = sqlite3_reset(prepared);
+
+  if(rc != SQLITE_OK) {
+    std::cerr << "SQL error: " << sqlite3_errmsg(db) << std::endl;
+    exit(2);
+  }
+}
+
+std::vector<std::string> read_data(sqlite3 * db, sqlite3_stmt * prepared)
+{
+  std::vector<std::string> ret;
+  reset_query(db, prepared);
+
+  int rc = sqlite3_step(prepared);
+
+  while (rc == SQLITE_ROW) {
+    ret.push_back( (const char *)sqlite3_column_text(prepared, 1) ); 
+    rc = sqlite3_step(prepared);
+  }
+
+  if (rc != SQLITE_DONE) {
+    std::cerr << "SQL error: " << sqlite3_errmsg(db) << std::endl;
+    exit(2);
+  }
+
+  return ret;
 }
 
 sqlite3* open_database(const char * dbname)
@@ -34,14 +70,21 @@ sqlite3* open_database(const char * dbname)
 void process()
 {
   sqlite3* db_ = open_database("test1.db");
-
-  exec_query(db_, "SELECT * from COMPANY"); 
+  sqlite3_stmt * stmt_ = prepare_query(db_, "select * from company");
+  std::vector<std::string> d = read_data(db_, stmt_);
+  
+  sqlite3_finalize(stmt_);
 
   sqlite3_close(db_);
+
+  for (const auto & s : d) {
+    std::cout << s << std::endl;
+  }
 }
 
 int main()
 {
-
+  process();
   return 0;
 }
+
